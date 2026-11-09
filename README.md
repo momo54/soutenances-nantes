@@ -38,19 +38,26 @@ ven. 13/11/2026  à 14 heures  [Thèse]  Josselin POIRET
 
 ## Page web mise à jour automatiquement
 
-Le fichier `.gitlab-ci.yml` génère la page avec GitLab Pages à chaque push sur `main`,
-et chaque jour via un pipeline programmé :
+La page générée affiche l'informatique / LS2N par défaut, avec une case à cocher pour
+afficher toutes les disciplines ; les données sont aussi publiées en JSON (`soutenances.json`).
 
-- page : <https://molli-p.univ-nantes.io/soutenances-nantes/>
-  (informatique / LS2N par défaut, case à cocher pour afficher toutes les disciplines) ;
-- données : <https://molli-p.univ-nantes.io/soutenances-nantes/soutenances.json>.
+### GitHub Pages
 
-Pour la mise à jour quotidienne, il faut un pipeline programmé :
+Le workflow `.github/workflows/pages.yml` régénère et publie la page à chaque push sur
+`main`, tous les jours à 5h UTC, et à la demande (*Actions → Page des soutenances →
+Run workflow*). Pages doit être réglé sur *Source : GitHub Actions*
+(*Settings → Pages*).
+
+GitHub suspend les workflows programmés d'un dépôt public après 60 jours sans activité :
+il suffit alors de le réactiver depuis l'onglet *Actions*.
+
+### GitLab Pages (gitlab.univ-nantes.fr)
+
+Le fichier `.gitlab-ci.yml` fait la même chose avec GitLab Pages, à chaque push sur `main`.
+Pour la mise à jour quotidienne, créer un pipeline programmé :
 *Build → Pipeline schedules → New schedule*, par exemple `0 6 * * *`, fuseau `Europe/Paris`,
-branche `main`.
-
-La visibilité de la page se règle dans *Settings → General → Visibility → Pages*
-(« Only project members » par défaut pour un projet privé).
+branche `main`. La visibilité de la page se règle dans
+*Settings → General → Visibility → Pages*.
 
 ## Filtre « informatique »
 

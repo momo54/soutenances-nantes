@@ -1,0 +1,47 @@
+# Génère la page des soutenances à venir et la publie avec GitHub Pages :
+# à chaque push sur main, chaque jour (cron) et à la demande (Actions > Run workflow).
+name: Page des soutenances
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * *"   # 5h UTC = 6h (hiver) / 7h (été) à Paris
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Paris
+      CI_PROJECT_URL: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Générer la page
+        run: |
+          mkdir -p public
+          python3 soutenances.py --html public/index.html --json > public/soutenances.json
+          python3 -c "import json; d=json.load(open('public/soutenances.json')); print(len(d), 'soutenance(s) informatique / LS2N'); [print(' ', s['date'], s['nom']) for s in d]"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
