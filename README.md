@@ -18,8 +18,9 @@ Les doublons entre sources sont fusionnés.
 Aucune dépendance : Python 3.8+ suffit.
 
 ```bash
-python3 soutenances.py                    # à venir, informatique / LS2N
-python3 soutenances.py --tout             # à venir, toutes disciplines
+python3 soutenances.py                    # 2 prochains mois, informatique / LS2N
+python3 soutenances.py --mois 6           # 6 prochains mois (--mois 0 : sans limite)
+python3 soutenances.py --tout             # toutes disciplines
 python3 soutenances.py --theses           # sans les HDR
 python3 soutenances.py --depuis 15        # inclut aussi les 15 derniers jours
 python3 soutenances.py --html page.html   # écrit aussi une page HTML

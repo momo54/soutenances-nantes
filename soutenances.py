@@ -12,7 +12,8 @@ Interroge en direct, à chaque lancement :
 Aucune dépendance : Python 3.8+.
 
 Exemples :
-  python3 soutenances.py                  # à venir, informatique / LS2N
+  python3 soutenances.py                  # 2 prochains mois, informatique / LS2N
+  python3 soutenances.py --mois 6         # 6 prochains mois (--mois 0 : sans limite)
   python3 soutenances.py --tout           # à venir, toutes disciplines (Nantes)
   python3 soutenances.py --depuis 15      # inclut aussi les 15 derniers jours
   python3 soutenances.py --html page.html # écrit aussi une page HTML
@@ -261,7 +262,22 @@ def minutes(h):
 JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
 
 
-def affiche(liste):
+def plus_mois(d, n):
+    """d + n mois calendaires (le 31/01 + 1 mois donne le 28 ou 29/02)."""
+    a, m = divmod(d.month - 1 + n, 12)
+    annee, mois = d.year + a, m + 1
+    suivant = dt.date(annee + mois // 12, mois % 12 + 1, 1)
+    return dt.date(annee, mois, min(d.day, (suivant - dt.timedelta(days=1)).day))
+
+
+def texte_periode(debut, fin):
+    return f"du {debut.strftime('%d/%m/%Y')} au {fin.strftime('%d/%m/%Y')}" if fin \
+        else f"à partir du {debut.strftime('%d/%m/%Y')}"
+
+
+def affiche(liste, periode=""):
+    if periode:
+        print(f"Soutenances {periode}")
     if not liste:
         print("Aucune soutenance trouvée pour cette période.")
         return
@@ -283,7 +299,7 @@ def affiche(liste):
     print()
 
 
-def page_html(liste, chemin, avec_bascule=False):
+def page_html(liste, chemin, avec_bascule=False, periode=""):
     """Page HTML. Avec avec_bascule, `liste` contient toutes les disciplines et une case
     à cocher permet d'afficher les non-informatiques (masquées par défaut)."""
     e = html.escape
@@ -300,7 +316,7 @@ def page_html(liste, chemin, avec_bascule=False):
             f"<small>{e(s['discipline'])}{' · dir. ' + e(s['direction']) if s['direction'] else ''}</small></td>"
             f"<td>{e(labo)}</td><td>{e(s['lieu'])}{live}</td></tr>")
     n_info = sum(1 for s in liste if est_info(s))
-    vide = '<tr><td colspan="4">Aucune soutenance à venir en informatique / LS2N.</td></tr>'
+    vide = '<tr><td colspan="4">Aucune soutenance annoncée en informatique / LS2N sur cette période.</td></tr>'
     corps = (vide + "\n" if n_info == 0 else "") + "\n".join(lignes)
     maj = dt.datetime.now().strftime("%d/%m/%Y à %H:%M")
     depot = os.environ.get("CI_PROJECT_URL", "")
@@ -319,7 +335,8 @@ body:not(.tout) tr.autre{{display:none}}tr.autre td{{opacity:.75}}
 @media (prefers-color-scheme:dark){{body{{background:#161616;color:#ddd}}th{{background:#262626}}td,th{{border-color:#333}}a{{color:#7ab7ff}}small{{color:#999}}}}
 @media (max-width:640px){{table,tbody,tr,td{{display:block}}tr:first-child{{display:none}}td{{border:0;padding:2px 0}}tr{{border-bottom:1px solid #ddd;padding:8px 0}}}}
 </style></head><body><h1>Soutenances à venir – informatique, Nantes</h1>
-<p><small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes{pied}</small></p>
+<p><b>Soutenances {e(periode)}</b><br>
+<small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes{pied}</small></p>
 {bascule}
 <table><tr><th>Date</th><th>Candidat·e / sujet</th><th>Labo</th><th>Lieu</th></tr>
 {corps}</table>
@@ -331,25 +348,32 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tout", action="store_true", help="toutes disciplines, pas seulement l'informatique")
     ap.add_argument("--theses", action="store_true", help="thèses seulement (sans les HDR)")
+    ap.add_argument("--mois", type=int, default=2, metavar="N",
+                    help="horizon : soutenances des N prochains mois (défaut 2, 0 = sans limite)")
     ap.add_argument("--depuis", type=int, default=0, metavar="N",
                     help="inclure aussi les soutenances des N derniers jours")
     ap.add_argument("--html", metavar="FICHIER", help="écrire aussi une page HTML")
     ap.add_argument("--json", action="store_true", help="sortie JSON")
     a = ap.parse_args()
 
-    limite = dt.date.today() - dt.timedelta(days=a.depuis)
+    aujourdhui = dt.date.today()
+    limite = aujourdhui - dt.timedelta(days=a.depuis)
+    fin = plus_mois(aujourdhui, a.mois) if a.mois > 0 else None
+    periode = texte_periode(limite, fin)
     sources = [_safe(nantes, limite) or [], _safe(ls2n, limite) or [],
                _safe(centrale, limite, a.tout) or []]
-    toutes = [s for s in fusion(sources) if not (a.theses and s["type"] == "HDR")]
+    toutes = [s for s in fusion(sources)
+              if not (a.theses and s["type"] == "HDR")
+              and (fin is None or s["date"] <= fin.isoformat())]
     liste = toutes if a.tout else [s for s in toutes if est_info(s)]
 
     if a.json:
         print(json.dumps(liste, ensure_ascii=False, indent=2))
     else:
-        affiche(liste)
+        affiche(liste, periode)
     if a.html:
         # la page contient toujours toutes les disciplines, l'informatique seule par défaut
-        page_html(toutes, a.html, avec_bascule=True)
+        page_html(toutes, a.html, avec_bascule=True, periode=periode)
         print(f"Page HTML écrite : {a.html}", file=sys.stderr)
 
 
