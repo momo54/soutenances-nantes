@@ -36,6 +36,22 @@ ven. 13/11/2026  à 14 heures  [Thèse]  Josselin POIRET
    https://www.univ-nantes.fr/recherche-et-innovation/doctorat/josselin-poiret-...  (Nantes Université)
 ```
 
+## Page web mise à jour automatiquement
+
+Le fichier `.gitlab-ci.yml` génère la page avec GitLab Pages à chaque push sur `main`,
+et chaque jour via un pipeline programmé :
+
+- page : <https://molli-p.univ-nantes.io/soutenances-nantes/>
+  (informatique / LS2N par défaut, case à cocher pour afficher toutes les disciplines) ;
+- données : <https://molli-p.univ-nantes.io/soutenances-nantes/soutenances.json>.
+
+Pour la mise à jour quotidienne, il faut un pipeline programmé :
+*Build → Pipeline schedules → New schedule*, par exemple `0 6 * * *`, fuseau `Europe/Paris`,
+branche `main`.
+
+La visibilité de la page se règle dans *Settings → General → Visibility → Pages*
+(« Only project members » par défaut pour un projet privé).
+
 ## Filtre « informatique »
 
 Une soutenance est retenue si sa discipline contient « informatique », **ou** si son

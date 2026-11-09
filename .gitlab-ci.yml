@@ -1,0 +1,19 @@
+# Génère la page des soutenances à venir et la publie avec GitLab Pages.
+# Tourne à chaque push sur la branche par défaut, au lancement manuel
+# (Build > Pipelines > Run pipeline) et via le pipeline programmé quotidien
+# (Build > Pipeline schedules).
+
+pages:
+  image: python:3.12-slim
+  variables:
+    TZ: Europe/Paris
+  script:
+    - mkdir -p public
+    - python3 soutenances.py --html public/index.html --json > public/soutenances.json
+    - cat public/soutenances.json | head -c 2000
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

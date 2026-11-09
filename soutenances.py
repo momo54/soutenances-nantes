@@ -23,6 +23,7 @@ import argparse
 import datetime as dt
 import html
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -282,32 +283,48 @@ def affiche(liste):
     print()
 
 
-def page_html(liste, chemin):
+def page_html(liste, chemin, avec_bascule=False):
+    """Page HTML. Avec avec_bascule, `liste` contient toutes les disciplines et une case
+    à cocher permet d'afficher les non-informatiques (masquées par défaut)."""
     e = html.escape
     lignes = []
     for s in liste:
         d = dt.date.fromisoformat(s["date"])
         live = f' · <a href="{e(s["live"])}">live</a>' if s["live"] else ""
         labo = s["labo"] + (f" / {s['equipe']}" if s["equipe"] else "")
+        cls = "" if est_info(s) else ' class="autre"'
         lignes.append(
-            f"<tr><td><b>{JOURS[d.weekday()]} {d.strftime('%d/%m')}</b><br><small>{e(s['horaire'])}</small></td>"
+            f"<tr{cls}><td><b>{JOURS[d.weekday()]} {d.strftime('%d/%m')}</b><br><small>{e(s['horaire'])}</small></td>"
             f"<td><b>{e(s['nom'])}</b> <small>({e(s['type'])})</small><br>"
             f"<a href=\"{e(s['lien'])}\">{e(s['sujet'])}</a><br>"
             f"<small>{e(s['discipline'])}{' · dir. ' + e(s['direction']) if s['direction'] else ''}</small></td>"
             f"<td>{e(labo)}</td><td>{e(s['lieu'])}{live}</td></tr>")
-    corps = "\n".join(lignes) or '<tr><td colspan="4">Aucune soutenance à venir.</td></tr>'
-    maj = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
+    n_info = sum(1 for s in liste if est_info(s))
+    vide = '<tr><td colspan="4">Aucune soutenance à venir en informatique / LS2N.</td></tr>'
+    corps = (vide + "\n" if n_info == 0 else "") + "\n".join(lignes)
+    maj = dt.datetime.now().strftime("%d/%m/%Y à %H:%M")
+    depot = os.environ.get("CI_PROJECT_URL", "")
+    pied = f' · <a href="{e(depot)}">code source</a>' if depot else ""
+    bascule = ""
+    if avec_bascule:
+        bascule = (f'<label><input type="checkbox" id="tout"> Afficher toutes les disciplines '
+                   f'({len(liste)} soutenances, dont {n_info} en informatique / LS2N)</label>')
     with open(chemin, "w", encoding="utf-8") as f:
         f.write(f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Soutenances à venir</title><style>
 body{{font:15px/1.45 system-ui,sans-serif;margin:24px auto;max-width:1100px;padding:0 16px;color:#222;background:#fff}}
-table{{border-collapse:collapse;width:100%}}td,th{{border-bottom:1px solid #ddd;padding:8px;text-align:left;vertical-align:top}}
-th{{background:#f4f4f4}}a{{color:#0b5cad}}small{{color:#666}}
+table{{border-collapse:collapse;width:100%;margin-top:12px}}td,th{{border-bottom:1px solid #ddd;padding:8px;text-align:left;vertical-align:top}}
+th{{background:#f4f4f4}}a{{color:#0b5cad}}small{{color:#666}}label{{cursor:pointer}}
+body:not(.tout) tr.autre{{display:none}}tr.autre td{{opacity:.75}}
 @media (prefers-color-scheme:dark){{body{{background:#161616;color:#ddd}}th{{background:#262626}}td,th{{border-color:#333}}a{{color:#7ab7ff}}small{{color:#999}}}}
+@media (max-width:640px){{table,tbody,tr,td{{display:block}}tr:first-child{{display:none}}td{{border:0;padding:2px 0}}tr{{border-bottom:1px solid #ddd;padding:8px 0}}}}
 </style></head><body><h1>Soutenances à venir – informatique, Nantes</h1>
-<p><small>Mis à jour le {maj} · Nantes Université, agenda LS2N, Centrale Nantes</small></p>
+<p><small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes{pied}</small></p>
+{bascule}
 <table><tr><th>Date</th><th>Candidat·e / sujet</th><th>Labo</th><th>Lieu</th></tr>
-{corps}</table></body></html>""")
+{corps}</table>
+<script>var c=document.getElementById('tout');if(c)c.onchange=function(){{document.body.classList.toggle('tout',c.checked)}};</script>
+</body></html>""")
 
 
 def main():
@@ -323,15 +340,16 @@ def main():
     limite = dt.date.today() - dt.timedelta(days=a.depuis)
     sources = [_safe(nantes, limite) or [], _safe(ls2n, limite) or [],
                _safe(centrale, limite, a.tout) or []]
-    liste = [s for s in fusion(sources)
-             if (a.tout or est_info(s)) and not (a.theses and s["type"] == "HDR")]
+    toutes = [s for s in fusion(sources) if not (a.theses and s["type"] == "HDR")]
+    liste = toutes if a.tout else [s for s in toutes if est_info(s)]
 
     if a.json:
         print(json.dumps(liste, ensure_ascii=False, indent=2))
     else:
         affiche(liste)
     if a.html:
-        page_html(liste, a.html)
+        # la page contient toujours toutes les disciplines, l'informatique seule par défaut
+        page_html(toutes, a.html, avec_bascule=True)
         print(f"Page HTML écrite : {a.html}", file=sys.stderr)
 
 
