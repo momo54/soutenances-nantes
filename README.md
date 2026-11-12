@@ -1,5 +1,8 @@
 # Soutenances à venir – informatique, Nantes
 
+**Page publique, mise à jour chaque jour : <https://momo54.github.io/soutenances-nantes/>**
+(données JSON : <https://momo54.github.io/soutenances-nantes/soutenances.json>)
+
 Petit script Python qui liste **en direct** les soutenances de thèse (et HDR) à venir
 en informatique à Nantes, en interrogeant à chaque lancement :
 
@@ -46,6 +49,9 @@ La page générée affiche l'informatique / LS2N par défaut, avec une case à c
 afficher toutes les disciplines ; les données sont aussi publiées en JSON (`soutenances.json`).
 
 ### GitHub Pages
+
+- page : <https://momo54.github.io/soutenances-nantes/>
+- données : <https://momo54.github.io/soutenances-nantes/soutenances.json>
 
 Le workflow `.github/workflows/pages.yml` régénère et publie la page à chaque push sur
 `main`, tous les jours à 5h UTC, et à la demande (*Actions → Page des soutenances →
