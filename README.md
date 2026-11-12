@@ -16,6 +16,13 @@ en informatique à Nantes, en interrogeant à chaque lancement :
 4. **IMT Atlantique, campus de Nantes** – [événements à venir](https://www.imt-atlantique.fr/fr/evenements)
    et flux RSS, en français et en anglais (les pages anglaises datent en mois.jour.année) ;
    les soutenances des campus de Brest et Rennes sont écartées.
+5. **Amethis** – les [thèses en cours](https://amethis.doctorat.org/amethis-client/doctorant/theses/E)
+   du LS2N à l'ED MaSTIC (collège doctoral Pays de la Loire) dont la date de soutenance
+   saisie est à venir, via la même requête anonyme que la page publique. Ces dates sont
+   **prévisionnelles** (affichées « prévisionnel ») : elles arrivent souvent des semaines
+   avant l'annonce officielle, mais peuvent changer. Les dates par défaut (début de
+   thèse + 3 ans, à minuit) sont ignorées, et une personne déjà annoncée par une autre
+   source n'est pas reprise d'Amethis.
 
 Les doublons entre sources sont fusionnés.
 
@@ -78,8 +85,10 @@ permettre le tri. `--tout` désactive le filtre.
 
 ## Limites
 
-- Le script ne voit que ce qui est publié sur ces quatre sites : une soutenance annoncée
+- Le script ne voit que ce qui est publié sur ces cinq sites : une soutenance annoncée
   seulement par mail n'apparaît pas.
+- Les dates Amethis dépendent de la saisie : une date prévisionnelle peut être
+  dépassée ou fausse tant qu'elle n'est pas confirmée.
 - Il lit le HTML des pages : si un site change de mise en page, l'extraction peut casser
   (une source en erreur est signalée sur stderr sans bloquer les autres).
 - theses.fr n'est pas utilisé : les thèses en cours n'y ont pas de date de soutenance.

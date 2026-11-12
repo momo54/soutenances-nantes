@@ -7,6 +7,9 @@ Interroge en direct, à chaque lancement :
   2. Agenda du LS2N (API WordPress publique de ls2n.fr) : thèses et HDR du labo.
   3. Centrale Nantes – page « PhD Defenses » (ED MaSTIC ou laboratoire LS2N).
   4. IMT Atlantique, campus de Nantes – événements à venir et flux RSS (FR + EN).
+  5. Amethis (gestion des doctorats) – thèses LS2N de l'ED MaSTIC dont la date de
+     soutenance prévue est à venir ; signalées « prévisionnel » tant que la date n'est
+     pas confirmée, et ignorées si une autre source annonce déjà la personne.
 
 « Informatique » = discipline/département contenant « informatique » OU laboratoire
 LS2N OU ED MaSTIC (le LS2N inclut aussi automatique/robotique : la discipline est affichée).
@@ -40,6 +43,10 @@ CENTRALE_URL = "https://research.ec-nantes.fr/en/phd-defenses"
 IMT_BASE = "https://www.imt-atlantique.fr"
 IMT_LISTES = ["/fr/evenements", "/en/events"]          # événements en cours / à venir
 IMT_RSS = ["/fr/evenements/rss", "/en/events/rss"]      # derniers événements publiés
+AMETHIS = "https://amethis.doctorat.org"
+AMETHIS_API = AMETHIS + "/amethis-server/doctorant/dossier/getAllThesesAnonymous"
+# filtre appliqué par le serveur Amethis : unité LS2N + ED 641 MaSTIC
+AMETHIS_FILTRE = {"urCod": "201722241F", "edoNatCod": "641"}
 
 MOIS_FR = {m: i for i, m in enumerate(
     ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet",
@@ -307,6 +314,63 @@ def imt(limite):
     return [s for s in en_parallele(imt_detail, liens) if s["date"] >= limite.isoformat()]
 
 
+# ---------------------------------------------------------------- Amethis
+def amethis(limite):
+    """Thèses LS2N / ED MaSTIC dont la date de soutenance saisie dans Amethis est à venir.
+
+    Même requête anonyme que la page publique « Thèses en cours » d'Amethis.
+    Beaucoup de dates y sont des valeurs par défaut (début + 3 ans, à minuit) : écartées.
+    Les autres restent des dates prévisionnelles tant qu'elles ne sont pas confirmées."""
+    search = dict(thsConfidentiel=0, thsSouDat=f">={limite.isoformat()} 00:00:00", **AMETHIS_FILTRE)
+    donnees = urllib.parse.urlencode({"page": 0, "size": -1, "sort": "thsSouDat", "direction": 1,
+                                      "search": json.dumps(search)}).encode()
+    req = urllib.request.Request(AMETHIS_API, data=donnees, headers={
+        "User-Agent": UA, "Accept": "application/json", "Accept-Language": "fr",
+        "Origin": AMETHIS, "Referer": AMETHIS + "/amethis-client/doctorant/theses/E"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        rep = json.loads(r.read().decode("utf-8"))
+    if not rep.get("success"):
+        raise RuntimeError(rep.get("message") or "réponse Amethis invalide")
+    out = []
+    for t in rep["data"]:
+        if "Pays de la Loire" not in t.get("groupementLib", ""):
+            continue
+        quand = dt.datetime.strptime(t["thsSouDatDateHeure"], "%d/%m/%Y %H:%M:%S")
+        debut = dt.datetime.strptime(t["thsDebDat"], "%d/%m/%Y").date()
+        confirmee = t.get("thsSouDatConfirmee") == "1"
+        minuit = quand.time() == dt.time(0, 0)
+        if not confirmee and minuit and (quand.day, quand.month) == (debut.day, debut.month):
+            continue  # date par défaut = date de début + n ans
+        horaire = "" if minuit else quand.strftime("%Hh%M")
+        if not confirmee:
+            horaire = (horaire + " · prévisionnel") if horaire else "date prévisionnelle"
+        lieu = (t.get("thsSouLeuLib") or "").strip()
+        if ascii_min(lieu) in ("english", "anglais", "anglias", "francais", "french"):
+            lieu = ""  # langue de la thèse saisie à la place du lieu
+        propre = lambda x: re.sub(r"\s+", " ", re.sub(r"-\s+", "-", x or "")).strip()
+        nom_famille = t.get("indNomUsuLib") or t["indNomPatLib"]
+        out.append(fiche(
+            date=quand.date().isoformat(), horaire=horaire,
+            nom=propre(f"{t['indPrnLib1']} {nom_famille}"), sujet=propre(t["thsLanguePrincLib"]),
+            discipline=" · ".join(x for x in (t.get("thsSpecialiteLib"), "ED " + t["edoNatSigle"]) if x),
+            direction=", ".join(propre(x) for x in (t.get("directeur"), t.get("coDirecteur")) if propre(x)),
+            labo=t.get("urSigle", ""), lieu=lieu, source="Amethis",
+            lien=f"{AMETHIS}/amethis-client/doctorant/theses/E/{t['thsId']}"))
+    return out
+
+
+def sans_deja_annoncees(prevues, annoncees):
+    """Retire les dates Amethis des personnes déjà annoncées par une autre source :
+    l'annonce officielle fait foi, même si la date prévisionnelle diffère."""
+    def morceaux(nom):
+        mots = [cle(m) for m in re.split(r"[\s\-]+", nom) if cle(m)]
+        return {"".join(mots[i:j]) for i in range(len(mots)) for j in range(i + 1, len(mots) + 1)}
+    def famille(nom):  # Amethis écrit le nom de famille en majuscules : « Thi Hoang Thi PHAM »
+        return cle("".join(m for m in nom.split() if m.isupper()) or nom.split()[-1])
+    connus = set().union(*(morceaux(s["nom"]) for s in annoncees)) if annoncees else set()
+    return [s for s in prevues if famille(s["nom"]) not in connus]
+
+
 # ------------------------------------------------------------- traitement
 def est_info(s):
     disc = ascii_min(s["discipline"])
@@ -420,7 +484,7 @@ body:not(.tout) tr.autre{{display:none}}tr.autre td{{opacity:.75}}
 @media (max-width:640px){{table,tbody,tr,td{{display:block}}tr:first-child{{display:none}}td{{border:0;padding:2px 0}}tr{{border-bottom:1px solid #ddd;padding:8px 0}}}}
 </style></head><body><h1>Soutenances à venir – informatique, Nantes</h1>
 <p><b>Soutenances {e(periode)}</b><br>
-<small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes, IMT Atlantique (Nantes){pied}</small></p>
+<small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes, IMT Atlantique (Nantes), Amethis (dates prévisionnelles LS2N / ED MaSTIC){pied}</small></p>
 {bascule}
 <table><tr><th>Date</th><th>Candidat·e / sujet</th><th>Labo</th><th>Lieu</th></tr>
 {corps}</table>
@@ -446,6 +510,8 @@ def main():
     periode = texte_periode(limite, fin)
     sources = [_safe(nantes, limite) or [], _safe(ls2n, limite) or [],
                _safe(centrale, limite, a.tout) or [], _safe(imt, limite) or []]
+    # Amethis en dernier : dates prévisionnelles, seulement pour qui n'est pas déjà annoncé
+    sources.append(sans_deja_annoncees(_safe(amethis, limite) or [], [s for l in sources for s in l]))
     toutes = [s for s in fusion(sources)
               if not (a.theses and s["type"] == "HDR")
               and (fin is None or s["date"] <= fin.isoformat())]
