@@ -6,9 +6,10 @@ Interroge en direct, à chaque lancement :
      chaque fiche est lue pour obtenir discipline, labo, heure et salle.
   2. Agenda du LS2N (API WordPress publique de ls2n.fr) : thèses et HDR du labo.
   3. Centrale Nantes – page « PhD Defenses » (ED MaSTIC ou laboratoire LS2N).
+  4. IMT Atlantique, campus de Nantes – événements à venir et flux RSS (FR + EN).
 
-« Informatique » = discipline contenant « informatique » OU laboratoire LS2N
-(le LS2N inclut aussi automatique/robotique : la discipline est affichée).
+« Informatique » = discipline/département contenant « informatique » OU laboratoire
+LS2N OU ED MaSTIC (le LS2N inclut aussi automatique/robotique : la discipline est affichée).
 Aucune dépendance : Python 3.8+.
 
 Exemples :
@@ -36,6 +37,9 @@ UA = "Mozilla/5.0 (soutenances-nantes script)"
 NANTES_URL = "https://www.univ-nantes.fr/recherche-et-innovation/doctorat/soutenances-de-theses"
 LS2N_API = "https://www.ls2n.fr/wp-json/wp/v2/agenda"
 CENTRALE_URL = "https://research.ec-nantes.fr/en/phd-defenses"
+IMT_BASE = "https://www.imt-atlantique.fr"
+IMT_LISTES = ["/fr/evenements", "/en/events"]          # événements en cours / à venir
+IMT_RSS = ["/fr/evenements/rss", "/en/events/rss"]      # derniers événements publiés
 
 MOIS_FR = {m: i for i, m in enumerate(
     ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet",
@@ -224,10 +228,90 @@ def centrale(limite, tout=False):
     return res if tout else [s for s in res if s["discipline"] == "ED MASTIC" or s["labo"] == "LS2N"]
 
 
+# ----------------------------------------------------- IMT Atlantique (Nantes)
+def lignes_texte(page):
+    page = re.sub(r"<script.*?</script>|<style.*?</style>", "", page, flags=re.S)
+    return [l.strip() for l in html.unescape(re.sub(r"<[^>]+>", "\n", page)).split("\n") if l.strip()]
+
+
+def imt_detail(url):
+    page = get(url)
+    en = "/en/" in url
+    h1 = re.search(r"<h1[^>]*>(.*?)</h1>", page, re.S)
+    titre = texte(h1.group(1)) if h1 else ""
+    lignes = lignes_texte(page)
+    k = next((i for i, l in enumerate(lignes) if titre and l == titre), 0)
+    bloc = lignes[k:k + 25]
+
+    jour = None
+    for l in bloc:
+        m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", l)
+        if m:  # les pages anglaises écrivent mois.jour.année
+            a, b, annee = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            jour = dt.date(annee, a, b) if en else dt.date(annee, b, a)
+            break
+    if not jour:
+        return None
+
+    def apres(etiquette):
+        i = next((i for i, l in enumerate(bloc) if re.match(etiquette, l, re.I)), None)
+        return bloc[i + 1] if i is not None and i + 1 < len(bloc) else ""
+
+    horaire = apres(r"(Horaires|Time)\s*:")
+    horaire = re.sub(r"^(De|From)\s+", "", horaire).replace(" to ", " à ")
+    lieu = apres(r"(Adresse|Address)\s*:")
+    if "nantes" not in ascii_min(lieu):
+        return None  # campus de Brest ou de Rennes
+
+    presente = next((l for l in bloc if re.search(r"présentera|will present", l)), "")
+    i = bloc.index(presente) if presente else -1
+    sujet = bloc[i + 1].strip('"“”« » ') if presente and i + 1 < len(bloc) else ""
+    nom = bloc[i - 1] if i > 0 else ""
+    if not nom or nom in ("Madame", "Monsieur") or re.search(r"\d", nom):
+        nom = re.sub(r"^Soutenance (?:de thèse|HDR|d'HDR) (?:de |d'|d’)\s*|\s+(?:Thesis|HDR) defen[cs]e$", "",
+                     titre, flags=re.I)
+    m = re.search(r"(?:laboratoire|laboratory)\s+([A-Za-z0-9\-]+)", presente)
+    labo = m.group(1) if m else ""
+    if re.fullmatch(r"LS2?N", labo):  # « LSN » : coquille fréquente pour LS2N
+        labo = "LS2N"
+    m = re.search(r"d[ée]part[e]?ment\s+(.*?)\s*(?:et du laboratoire|et laboratoire|and (?:the )?laboratory)",
+                  presente, re.I)
+    departement = "dépt. " + m.group(1).strip(" ,") if m and m.group(1).strip(" ,") else ""
+    m = re.search(r"(?:école doctorale|doctoral school)\s+([A-Za-z0-9][\w\-]*)", " ".join(lignes), re.I)
+    ecole = "ED " + m.group(1) if m else ""
+    return fiche(
+        date=jour.isoformat(), horaire=horaire, nom=nom, sujet=sujet,
+        type="HDR" if re.search(r"\bHDR\b", titre) else "Thèse",
+        discipline=" · ".join(x for x in (departement, ecole) if x),
+        labo=labo, lieu=lieu, lien=url, source="IMT Atlantique")
+
+
+def imt(limite):
+    motif = re.compile(r"(?:soutenance|thesis-defen|hdr)", re.I)
+    liens = []
+    for chemin in IMT_LISTES:
+        for page in range(3):  # la liste « à venir » tient en général sur une page
+            p = _safe(get, f"{IMT_BASE}{chemin}?page={page}") or ""
+            nouveaux = [IMT_BASE + h for h in re.findall(r'href="(/(?:fr/evenements|en/events)/[^"?#]+)"', p)
+                        if motif.search(h) and IMT_BASE + h not in liens]
+            if not nouveaux:
+                break
+            liens += nouveaux
+    for chemin in IMT_RSS:
+        rss = _safe(get, IMT_BASE + chemin) or ""
+        liens += [l for l in re.findall(r"<link>([^<]+)</link>", rss)
+                  if motif.search(l) and l not in liens]
+    liens = list(dict.fromkeys(liens))
+    # FR d'abord : en cas de doublon FR/EN, la fusion garde la fiche française
+    liens.sort(key=lambda u: "/en/" in u)
+    return [s for s in en_parallele(imt_detail, liens) if s["date"] >= limite.isoformat()]
+
+
 # ------------------------------------------------------------- traitement
 def est_info(s):
-    return "informatique" in ascii_min(s["discipline"]) or s["labo"].upper() == "LS2N" \
-        or s["source"] == "LS2N" or s["discipline"] == "ED MASTIC"
+    disc = ascii_min(s["discipline"])
+    return "informatique" in disc or "mastic" in disc or s["labo"].upper() == "LS2N" \
+        or s["source"] == "LS2N"
 
 
 def fusion(listes):
@@ -336,7 +420,7 @@ body:not(.tout) tr.autre{{display:none}}tr.autre td{{opacity:.75}}
 @media (max-width:640px){{table,tbody,tr,td{{display:block}}tr:first-child{{display:none}}td{{border:0;padding:2px 0}}tr{{border-bottom:1px solid #ddd;padding:8px 0}}}}
 </style></head><body><h1>Soutenances à venir – informatique, Nantes</h1>
 <p><b>Soutenances {e(periode)}</b><br>
-<small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes{pied}</small></p>
+<small>Mis à jour le {maj} · sources : Nantes Université, agenda LS2N, Centrale Nantes, IMT Atlantique (Nantes){pied}</small></p>
 {bascule}
 <table><tr><th>Date</th><th>Candidat·e / sujet</th><th>Labo</th><th>Lieu</th></tr>
 {corps}</table>
@@ -361,7 +445,7 @@ def main():
     fin = plus_mois(aujourdhui, a.mois) if a.mois > 0 else None
     periode = texte_periode(limite, fin)
     sources = [_safe(nantes, limite) or [], _safe(ls2n, limite) or [],
-               _safe(centrale, limite, a.tout) or []]
+               _safe(centrale, limite, a.tout) or [], _safe(imt, limite) or []]
     toutes = [s for s in fusion(sources)
               if not (a.theses and s["type"] == "HDR")
               and (fin is None or s["date"] <= fin.isoformat())]

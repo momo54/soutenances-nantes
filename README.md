@@ -10,6 +10,9 @@ en informatique à Nantes, en interrogeant à chaque lancement :
    (thèses et HDR du labo, tous établissements : Nantes Université, Centrale, IMT Atlantique).
 3. **Centrale Nantes** – page [PhD Defenses](https://research.ec-nantes.fr/en/phd-defenses)
    (ED MaSTIC ou laboratoire LS2N).
+4. **IMT Atlantique, campus de Nantes** – [événements à venir](https://www.imt-atlantique.fr/fr/evenements)
+   et flux RSS, en français et en anglais (les pages anglaises datent en mois.jour.année) ;
+   les soutenances des campus de Brest et Rennes sont écartées.
 
 Les doublons entre sources sont fusionnés.
 
@@ -62,15 +65,15 @@ branche `main`. La visibilité de la page se règle dans
 
 ## Filtre « informatique »
 
-Une soutenance est retenue si sa discipline contient « informatique », **ou** si son
-laboratoire est le LS2N, **ou** si elle relève de l'ED MaSTIC à Centrale. Le LS2N couvrant
-aussi l'automatique et la robotique, la discipline est affichée pour permettre le tri.
-`--tout` désactive le filtre.
+Une soutenance est retenue si sa discipline (ou son département, à l'IMT) contient
+« informatique », **ou** si son laboratoire est le LS2N, **ou** si elle relève de l'ED MaSTIC.
+Le LS2N couvrant aussi l'automatique et la robotique, la discipline est affichée pour
+permettre le tri. `--tout` désactive le filtre.
 
 ## Limites
 
-- Le script ne voit que ce qui est publié sur ces trois sites : une soutenance annoncée
-  seulement par mail, ou à l'IMT Atlantique hors agenda LS2N, n'apparaît pas.
+- Le script ne voit que ce qui est publié sur ces quatre sites : une soutenance annoncée
+  seulement par mail n'apparaît pas.
 - Il lit le HTML des pages : si un site change de mise en page, l'extraction peut casser
   (une source en erreur est signalée sur stderr sans bloquer les autres).
 - theses.fr n'est pas utilisé : les thèses en cours n'y ont pas de date de soutenance.
